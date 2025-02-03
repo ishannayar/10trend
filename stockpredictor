@@ -1,0 +1,181 @@
+import yfinance as yf
+import numpy as np
+import pandas as pd
+from datetime import datetime, timedelta
+import matplotlib.pyplot as plt
+from sklearn.linear_model import LinearRegression
+def analyze_stock_trend(ticker_symbol, days_to_analyze=180):
+    try:
+        # Get stock data for recent analysis
+        stock = yf.Ticker(ticker_symbol)
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=days_to_analyze)
+        hist = stock.history(start=start_date, end=end_date)
+        
+        # Get complete history for second graph
+        full_hist = stock.history(period="max")
+        
+        if len(hist) == 0:
+            return "No data available for this stock symbol"
+        
+        # Calculate moving averages
+        hist['MA20'] = hist['Close'].rolling(window=20).mean()
+        hist['MA50'] = hist['Close'].rolling(window=50).mean()
+        
+        # Calculate momentum indicators
+        hist['Returns'] = hist['Close'].pct_change()
+        hist['Momentum'] = hist['Returns'].rolling(window=14).mean()
+        
+        # Get current trends
+        current_price = hist['Close'][-1]
+        ma20_current = hist['MA20'][-1]
+        ma50_current = hist['MA50'][-1]
+        momentum = hist['Momentum'][-1]
+        
+        # Simple trend prediction logic
+        trend_strength = ""
+        prediction = ""
+        
+        if ma20_current > ma50_current and momentum > 0:
+            trend_strength = "Strong upward"
+            prediction = "likely to continue rising"
+        elif ma20_current > ma50_current and momentum <= 0:
+            trend_strength = "Weak upward"
+            prediction = "may continue rising but showing weakness"
+        elif ma20_current < ma50_current and momentum < 0:
+            trend_strength = "Strong downward"
+            prediction = "likely to continue falling"
+        elif ma20_current < ma50_current and momentum >= 0:
+            trend_strength = "Weak downward"
+            prediction = "may continue falling but showing strength"
+        
+        # Prepare data for future prediction
+        X = np.arange(len(hist)).reshape(-1, 1)
+        y = hist['Close'].values
+        
+        # Fit linear regression
+        model = LinearRegression()
+        model.fit(X, y)
+        
+        # Generate future dates for prediction (2 years = ~504 trading days)
+        future_days = 504
+        future_X = np.arange(len(hist), len(hist) + future_days).reshape(-1, 1)
+        
+        # Create figure with two subplots
+        plt.style.use('dark_background')
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 12))
+        
+        # Ensure we have valid data before making predictions
+        if len(hist.index) > 0:
+            future_dates = pd.date_range(start=hist.index[-1], periods=future_days + 1, freq='B')[1:]
+            future_predictions = model.predict(future_X)
+            
+            # Plot 1: Recent data analysis
+            ax1.plot(hist.index, hist['Close'], label='Stock Price', color='#00ff00')
+            ax1.plot(hist.index, hist['MA20'], label='20-day MA', color='#ff6b6b')
+            ax1.plot(hist.index, hist['MA50'], label='50-day MA', color='#4dabf7')
+            ax1.plot(future_dates, future_predictions, '--', label='2-Year Prediction', color='#ffd43b')
+            
+            ax1.set_title(f'{ticker_symbol} Recent Price Analysis', color='white')
+            ax1.set_xlabel('Date', color='white')
+            ax1.set_ylabel('Price', color='white')
+            ax1.grid(True, alpha=0.2)
+            ax1.legend(facecolor='black', edgecolor='white')
+            ax1.tick_params(colors='white')
+            
+            # Plot 2: Full history with predictive trend
+            # Sample 13 evenly spaced points from history
+            sample_indices = np.linspace(0, len(full_hist)-1, 13, dtype=int)
+            sample_dates = full_hist.index[sample_indices]
+            sample_prices = full_hist['Close'].iloc[sample_indices]
+            
+            # Fit polynomial regression for curved prediction
+            z = np.polyfit(range(len(full_hist)), full_hist['Close'], 3)
+            p = np.poly1d(z)
+            
+            # Generate trend line for entire history
+            trend_x = np.arange(len(full_hist))
+            trend_values = p(trend_x)
+            
+            # Calculate slopes
+            long_term_slope = (trend_values[-1] - trend_values[-100]) / 100  # Using last 100 points for slope
+            future_slope = (future_predictions[-1] - future_predictions[0]) / len(future_predictions)
+            
+            # Calculate alignment percentage
+            slope_difference = abs(long_term_slope - future_slope)
+            max_slope = max(abs(long_term_slope), abs(future_slope))
+            alignment_percentage = (1 - slope_difference/max_slope) * 100 if max_slope != 0 else 100
+            
+            # Plot full history
+            ax2.plot(full_hist.index, full_hist['Close'], label='Historical Price', color='#00ff00')
+            ax2.plot(sample_dates, sample_prices, 'o', color='#ff6b6b', label='Sample Points')
+            ax2.plot(full_hist.index, trend_values, '--', label=f'Long-term Trend (Slope: {long_term_slope:.2f})', color='#ffd43b')
+            ax2.plot(future_dates, future_predictions, '--', label=f'2-Year Prediction (Slope: {future_slope:.2f})', color='#ff00ff')
+            
+            ax2.set_title(f'{ticker_symbol} Complete Price History\nTrend Alignment: {alignment_percentage:.1f}%', color='white')
+            ax2.set_xlabel('Date', color='white')
+            ax2.set_ylabel('Price', color='white')
+            ax2.grid(True, alpha=0.2)
+            ax2.legend(facecolor='black', edgecolor='white')
+            ax2.tick_params(colors='white')
+            
+            plt.tight_layout()
+            plt.show()
+        else:
+            return "Insufficient data for prediction"
+        
+        return f"""
+Karmic Union Stock Analysis for {ticker_symbol}:
+Current Price: ${current_price:.2f}
+Trend Strength: {trend_strength}
+Prediction: The stock is {prediction}
+Long-term Trend Slope: {long_term_slope:.2f}
+2-Year Prediction Slope: {future_slope:.2f}
+Trend Alignment: {alignment_percentage:.1f}%
+Note: This is a simple analysis and should not be used as the sole basis for investment decisions.
+"""
+    except Exception as e:
+        return f"An error occurred: {str(e)}"
+
+# Popular stock symbols for reference
+POPULAR_STOCKS = {
+    'Technology': ['AAPL (Apple)', 'MSFT (Microsoft)', 'GOOGL (Alphabet)', 'META (Meta)', 'NVDA (NVIDIA)'],
+    'E-commerce': ['AMZN (Amazon)', 'BABA (Alibaba)', 'SHOP (Shopify)'],
+    'Electric Vehicles': ['TSLA (Tesla)', 'NIO (NIO Inc.)', 'F (Ford)'],
+    'Finance': ['JPM (JPMorgan)', 'V (Visa)', 'MA (Mastercard)'],
+    'Healthcare': ['JNJ (Johnson & Johnson)', 'PFE (Pfizer)', 'UNH (UnitedHealth)']
+}
+
+# Main loop for analyzing stocks
+while True:
+    try:
+        # Display popular stock suggestions
+        print("\nPopular stocks by sector:")
+        for sector, stocks in POPULAR_STOCKS.items():
+            print(f"\n{sector}:")
+            for stock in stocks:
+                print(f"  • {stock}")
+        
+        company_symbol = input("\nEnter the stock symbol (e.g., AAPL for Apple): ").strip().upper()
+        if not company_symbol:
+            print("Please enter a valid stock symbol")
+            continue
+            
+        print(analyze_stock_trend(company_symbol))
+        
+        # Ask if user wants to analyze another stock
+        while True:
+            again = input("\nWould you like to analyze another stock? (yes/no): ").lower().strip()
+            if again in ['yes', 'no']:
+                break
+            print("Please enter 'yes' or 'no'")
+        
+        if again == 'no':
+            print("Thank you for using the Karmic Union Stock Analysis!")
+            break
+            
+    except KeyboardInterrupt:
+        print("\nProgram terminated by user")
+        break
+    except Exception as e:
+        print(f"An unexpected error occurred: {str(e)}")
