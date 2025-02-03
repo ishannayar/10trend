@@ -1,0 +1,34 @@
+# Get 10 data points from user
+data_points = []
+print("Please enter 10 numerical data points:")
+
+for i in range(10):
+    while True:
+        try:
+            value = float(input(f"Enter data point {i+1}: "))
+            data_points.append(value)
+            break
+        except ValueError:
+            print("Please enter a valid number")
+
+# Calculate the overall trend
+def analyze_trend(data):
+    # Calculate the average change between consecutive points
+    changes = [data[i+1] - data[i] for i in range(len(data)-1)]
+    avg_change = sum(changes) / len(changes)
+    
+    # Define threshold for what constitutes a significant trend
+    threshold = 0.5
+    
+    # Determine trend direction
+    if avg_change > threshold:
+        return "up"
+    elif avg_change < -threshold:
+        return "down"
+    else:
+        return "horizontal"
+
+# Analyze and print the trend
+trend = analyze_trend(data_points)
+print(f"\nData points: {data_points}")
+print(f"The trend is: {trend}")
